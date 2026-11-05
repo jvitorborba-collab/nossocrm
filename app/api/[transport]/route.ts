@@ -72,7 +72,10 @@ const authWrappedHandler = withMcpAuth(
     // Return a minimal AuthInfo-compatible object. The real context is stored
     // in AsyncLocalStorage by the outer wrappedHandler below.
     return { token, clientId: ctx.userId, scopes: [] };
-  }
+  },
+  // Sem chave válida, responde 401 em vez de deixar as tools rodarem sem
+  // contexto ("MCP context not available").
+  { required: true }
 );
 
 async function wrappedHandler(request: Request) {
