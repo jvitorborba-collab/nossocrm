@@ -42,6 +42,7 @@ export type HublaParsed = {
   /** Chave de idempotência: uma por fatura + resultado. */
   dedupeKey: string;
   invoiceId: string;
+  /** Nomes de todos os itens da fatura (produto principal + orderbumps), separados por " + ". */
   productName: string | null;
   productId: string | null;
   buyerName: string | null;
@@ -97,13 +98,17 @@ export function parseHublaEvent(body: unknown): HublaParsed | null {
   const amount = Number.isFinite(cents) ? cents / 100 : Number(amountObj.total) || 0;
 
   const product = obj(event.product);
+  const names = Array.isArray(event.products)
+    ? (event.products as unknown[]).map((p) => str(obj(p).name)).filter((n): n is string => !!n)
+    : [];
+  const allNames = Array.from(new Set([...names, ...(str(product.name) ? [str(product.name)!] : [])]));
 
   return {
     outcome,
     eventType: type,
     dedupeKey: `hubla:${invoiceId}:${outcome}`,
     invoiceId,
-    productName: str(product.name),
+    productName: allNames.length ? allNames.join(' + ') : null,
     productId: str(product.id),
     buyerName: name,
     buyerEmail: email,

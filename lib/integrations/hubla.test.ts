@@ -36,6 +36,12 @@ describe('parseHublaEvent', () => {
     expect(parseHublaEvent(base('invoice.status_updated', 'refunded'))?.outcome).toBe('refunded');
   });
 
+  it('junta produto principal e orderbumps no nome', () => {
+    const b: any = base('invoice.payment_succeeded');
+    b.event.products = [{ id: 'p1', name: 'Programa X' }, { id: 'p2', name: 'Bump Y' }];
+    expect(parseHublaEvent(b)?.productName).toBe('Programa X + Bump Y');
+  });
+
   it('ignora eventos desconhecidos e payloads inválidos', () => {
     expect(parseHublaEvent(base('subscription.created'))).toBeNull();
     expect(parseHublaEvent(base('invoice.status_updated', 'pending'))).toBeNull();
