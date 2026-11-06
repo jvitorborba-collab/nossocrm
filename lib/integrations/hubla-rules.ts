@@ -6,8 +6,8 @@ export type HublaProductRule = {
   id: string;
   /** Casa com o nome do produto vendido (pode ser "Produto A + Produto B"). */
   productPattern: RegExp;
-  /** Trecho do nome do funil de origem (busca sem diferenciar maiúsculas). */
-  boardNameContains: string;
+  /** Slug (boards.key) do funil de origem. Correspondência exata, não depende do nome. */
+  boardKey: string;
   /** Tag aplicada ao negócio do lead. */
   tag: string;
   /** Etapa de destino: tenta pelo nome; se não achar, usa a última etapa do funil. */
@@ -18,7 +18,7 @@ export const HUBLA_PRODUCT_RULES: HublaProductRule[] = [
   {
     id: 'voce-mamae',
     productPattern: /voc[eê]\s+mam[aã]e/i,
-    boardNameContains: 'detox',
+    boardKey: 'detox',
     tag: 'comprou-voce-mamae',
     stagePattern: /virou\s+aluna.*mam[aã]e/i,
   },

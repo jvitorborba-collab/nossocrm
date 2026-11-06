@@ -168,7 +168,7 @@ async function applyProductRules(sb: Sb, orgId: string, contactId: string, p: Hu
       .from('boards')
       .select('id')
       .eq('organization_id', orgId)
-      .ilike('name', `%${rule.boardNameContains}%`);
+      .eq('key', rule.boardKey);
     const boardIds = (boards ?? []).map((b) => b.id as string);
     if (boardIds.length === 0) continue;
 
