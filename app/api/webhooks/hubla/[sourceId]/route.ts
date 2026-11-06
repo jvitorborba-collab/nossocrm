@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { createStaticAdminClient } from '@/lib/supabase/staticAdminClient';
 import { isValidUUID } from '@/lib/supabase/utils';
 import { parseHublaEvent, type HublaParsed } from '@/lib/integrations/hubla';
+import { matchProductRules, pickTargetStage, mergeTags } from '@/lib/integrations/hubla-rules';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -156,10 +157,73 @@ async function findOrCreateContact(sb: Sb, orgId: string, p: HublaParsed): Promi
   return created.id as string;
 }
 
+/**
+ * Se o produto vendido casa com uma regra e o contato já tem negócio no funil de origem,
+ * marca com a tag, move para a etapa final e soma o valor da venda. Retorna o id do negócio
+ * atualizado, ou null quando nenhuma regra se aplicou (segue o fluxo normal).
+ */
+async function applyProductRules(sb: Sb, orgId: string, contactId: string, p: HublaParsed): Promise<string | null> {
+  for (const rule of matchProductRules(p.productName)) {
+    const { data: boards } = await sb
+      .from('boards')
+      .select('id')
+      .eq('organization_id', orgId)
+      .ilike('name', `%${rule.boardNameContains}%`);
+    const boardIds = (boards ?? []).map((b) => b.id as string);
+    if (boardIds.length === 0) continue;
+
+    const { data: deal } = await sb
+      .from('deals')
+      .select('id, board_id, stage_id, tags, value, custom_fields')
+      .eq('organization_id', orgId)
+      .eq('contact_id', contactId)
+      .in('board_id', boardIds)
+      .is('deleted_at', null)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!deal) continue;
+
+    const { data: stages } = await sb
+      .from('board_stages')
+      .select('id, label, order')
+      .eq('board_id', deal.board_id as string);
+    const targetStage = pickTargetStage(
+      (stages ?? []).map((s) => ({ id: s.id as string, label: s.label as string, order: Number(s.order) })),
+      rule,
+    );
+    if (!targetStage) continue;
+
+    const now = new Date().toISOString();
+    const prev = (deal.custom_fields as Record<string, unknown>) ?? {};
+    const moved = deal.stage_id !== targetStage;
+    const { error } = await sb
+      .from('deals')
+      .update({
+        stage_id: targetStage,
+        ...(moved ? { last_stage_change_date: now } : {}),
+        tags: mergeTags(deal.tags, [rule.tag]),
+        value: Number(deal.value ?? 0) + (p.amount > 0 ? p.amount : 0),
+        custom_fields: { ...prev, [`hubla_rule_${rule.id}_invoice`]: p.invoiceId, hubla_product: p.productName },
+        updated_at: now,
+      })
+      .eq('id', deal.id as string);
+    if (error) throw error;
+    return deal.id as string;
+  }
+  return null;
+}
+
 async function applyEvent(sb: Sb, source: Source, p: HublaParsed) {
   const orgId = source.organization_id;
   const now = new Date().toISOString();
   const contactId = await findOrCreateContact(sb, orgId, p);
+
+  // Regras por produto (ex.: Você Mamãe → tag + etapa final no funil do Detox).
+  if (p.outcome === 'won' && contactId) {
+    const ruled = await applyProductRules(sb, orgId, contactId, p);
+    if (ruled) return { contactId, dealId: ruled };
+  }
 
   // Negócio já ligado a esta fatura?
   const { data: byInvoice } = await sb
