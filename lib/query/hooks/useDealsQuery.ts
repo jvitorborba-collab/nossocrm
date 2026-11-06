@@ -32,6 +32,9 @@ const makeSelectByBoard = (boardId: string) => (data: DealView[]) => {
  *
  * Sempre produz DealView[] completo; filtragem é responsabilidade do caller.
  */
+/** Rede de segurança: se o Realtime falhar, a lista de negócios se corrige sozinha. */
+const DEALS_SAFETY_REFETCH_MS = 60_000;
+
 export const dealsViewQueryFn = async (
   { signal }: { signal?: AbortSignal } = {}
 ): Promise<DealView[]> => {
@@ -151,6 +154,7 @@ export const useDealsView = (filters?: DealsFilters) => {
       });
     },
     staleTime: 2 * 60 * 1000, // 2 minutes
+    refetchInterval: DEALS_SAFETY_REFETCH_MS,
     enabled: !authLoading && !!user, // Only fetch when auth is ready
   });
 };
@@ -189,6 +193,7 @@ export const useDealsByBoard = (boardId: string) => {
     // Filtrar por boardId no cliente (compartilha cache mas retorna só os deals do board)
     select: selectForBoard,
     staleTime: 2 * 60 * 1000, // 2 minutes (same as useDealsView)
+    refetchInterval: DEALS_SAFETY_REFETCH_MS,
     enabled: !authLoading && !!user && !!boardId && !boardId.startsWith('temp-'),
   });
 };
@@ -484,9 +489,14 @@ export const useDeleteDeal = () => {
       // Usa DEALS_VIEW_KEY - a única fonte de verdade
       const previousDeals = queryClient.getQueryData<DealView[]>(DEALS_VIEW_KEY);
 
-      queryClient.setQueryData<DealView[]>(DEALS_VIEW_KEY, (old = []) =>
-        old.filter(deal => deal.id !== id)
-      );
+      // Só remove otimisticamente se já há dados em cache. Sem cache (ex.: carga inicial
+      // cancelada acima), escrever `[]` fazia a lista inteira sumir até o próximo F5.
+      if (previousDeals) {
+        queryClient.setQueryData<DealView[]>(
+          DEALS_VIEW_KEY,
+          previousDeals.filter(deal => deal.id !== id)
+        );
+      }
 
       return { previousDeals };
     },
@@ -496,8 +506,8 @@ export const useDeleteDeal = () => {
       }
     },
     onSettled: () => {
-      // NÃO fazer invalidateQueries para deals - Realtime gerencia a sincronização
-      // Apenas atualiza stats do dashboard
+      // Sempre reconcilia com o servidor: não depende do Realtime para a tela refletir a exclusão.
+      queryClient.invalidateQueries({ queryKey: queryKeys.deals.lists() });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats });
     },
   });
