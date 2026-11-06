@@ -129,7 +129,7 @@ export const useBoardsController = () => {
   const [ownerFilter, setOwnerFilter] = useState<'all' | 'mine'>('all');
   const [statusFilter, setStatusFilter] = useState<'open' | 'won' | 'lost' | 'all'>('open');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
-  // Filtro de período (mesmas opções da Visão Geral). Aplica sobre a data de criação do negócio.
+  // Filtro de período (mesmas opções da Visão Geral). Aplica sobre a data da última atividade do negócio.
   const [period, setPeriod] = useState<PeriodFilter>('all');
 
   // Track last context signature to avoid unnecessary setContext calls
@@ -388,12 +388,17 @@ export const useBoardsController = () => {
         ownerFilter === 'all' || l.ownerId === profile?.id;
 
       // Date: usa timestamps pré-computados (comparação numérica é mais rápida)
+      // Com o filtro de período ativo usa a data da última atividade (última alteração do
+      // negócio: mudança de etapa, edição, venda...). Sem ele, mantém a data de criação.
+      const dateRef = new Date(
+        (period !== 'all' ? l.updatedAt || l.createdAt : l.createdAt)
+      ).getTime();
       let matchesDate = true;
       if (startTime !== null) {
-        matchesDate = new Date(l.createdAt).getTime() >= startTime;
+        matchesDate = dateRef >= startTime;
       }
       if (matchesDate && endTime !== null) {
-        matchesDate = new Date(l.createdAt).getTime() <= endTime;
+        matchesDate = dateRef <= endTime;
       }
 
       // Status Filter Logic

@@ -204,7 +204,8 @@ export const KanbanHeader: React.FC<KanbanHeaderProps> = ({
                     <select
                         value={period}
                         onChange={(e) => setPeriod(e.target.value as PeriodFilter)}
-                        aria-label="Filtrar por período de criação"
+                        aria-label="Filtrar por data da última atividade"
+                        title="Data da última atividade do negócio"
                         className="pl-3 pr-8 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-white/5 text-sm outline-none focus:ring-2 focus:ring-primary-500 dark:text-white backdrop-blur-sm appearance-none cursor-pointer"
                     >
                         {(Object.keys(PERIOD_LABELS) as PeriodFilter[]).map((key) => (
