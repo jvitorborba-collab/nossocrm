@@ -4,6 +4,11 @@ import FocusTrapReact from 'focus-trap-react';
 export interface FocusTrapProps {
   /** Whether the trap is active */
   active: boolean;
+  /**
+   * Pausa o trap sem desativar (ex.: enquanto um diálogo Radix em portal está aberto por cima;
+   * sem isso, o focus-trap engole os cliques fora do container e o diálogo fica travado).
+   */
+  paused?: boolean;
   /** Element(s) to trap focus within */
   children: React.ReactNode;
   /** Callback when user presses Escape */
@@ -35,6 +40,7 @@ export interface FocusTrapProps {
  */
 export const FocusTrap: React.FC<FocusTrapProps> = ({
   active,
+  paused = false,
   children,
   onEscape,
   initialFocus,
@@ -57,6 +63,7 @@ export const FocusTrap: React.FC<FocusTrapProps> = ({
   return (
     <FocusTrapReact
       active={active}
+      paused={paused}
       focusTrapOptions={{
         initialFocus: getInitialFocus(),
         returnFocusOnDeactivate: returnFocus,
