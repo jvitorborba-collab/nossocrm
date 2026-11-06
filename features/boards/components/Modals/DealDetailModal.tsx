@@ -653,12 +653,12 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                     <User size={14} /> Contato Principal
                   </h3>
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold">
+                    <div className="w-8 h-8 shrink-0 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold">
                       {(deal.contactName || '?').charAt(0)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-slate-900 dark:text-white font-medium text-sm flex items-center gap-2">
-                        {deal.contactName || 'Sem contato'}
+                      <p className="text-slate-900 dark:text-white font-medium text-sm flex items-center gap-2 min-w-0">
+                        <span className="truncate min-w-0">{deal.contactName || 'Sem contato'}</span>
                         {contact?.stage &&
                           (() => {
                             const stage = lifecycleStageById.get(contact.stage);
@@ -671,14 +671,16 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
 
                             return (
                               <span
-                                className={`text-[10px] font-black px-2 py-0.5 rounded shadow-sm uppercase tracking-wider flex items-center gap-1 text-white ${colorClass}`}
+                                className={`shrink-0 text-[10px] font-black px-2 py-0.5 rounded shadow-sm uppercase tracking-wider flex items-center gap-1 text-white ${colorClass}`}
                               >
                                 {stage.name}
                               </span>
                             );
                           })()}
                       </p>
-                      <p className="text-slate-500 text-xs">{deal.contactEmail}</p>
+                      <p className="text-slate-500 text-xs truncate" title={deal.contactEmail || undefined}>
+                        {deal.contactEmail}
+                      </p>
                     </div>
                     {/* Send Message Button */}
                     {contact?.phone && (
@@ -695,7 +697,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                           router.push(`/messaging?${params.toString()}`);
                           onClose();
                         }}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10 hover:bg-green-100 dark:hover:bg-green-500/20 rounded-lg transition-colors"
+                        className="shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10 hover:bg-green-100 dark:hover:bg-green-500/20 rounded-lg transition-colors"
                         title="Enviar mensagem via WhatsApp"
                       >
                         <MessageSquare size={14} />
