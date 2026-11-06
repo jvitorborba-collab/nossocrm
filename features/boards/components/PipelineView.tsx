@@ -1,4 +1,5 @@
 import React from 'react';
+import type { PeriodFilter } from '@/features/dashboard/hooks/useDashboardMetrics';
 import { DealDetailModal } from './Modals/DealDetailModal';
 import { CreateDealModal } from './Modals/CreateDealModal';
 import { CreateBoardModal } from './Modals/CreateBoardModal';
@@ -46,6 +47,8 @@ interface PipelineViewProps {
   setOwnerFilter: (filter: 'all' | 'mine') => void;
   statusFilter: 'open' | 'won' | 'lost' | 'all';
   setStatusFilter: (filter: 'open' | 'won' | 'lost' | 'all') => void;
+  period: PeriodFilter;
+  setPeriod: (period: PeriodFilter) => void;
   draggingId: string | null;
   selectedDealId: string | null;
   setSelectedDealId: (id: string | null) => void;
@@ -114,6 +117,8 @@ interface PipelineViewProps {
   setOwnerFilter,
   statusFilter,
   setStatusFilter,
+  period,
+  setPeriod,
   draggingId,
   selectedDealId,
   setSelectedDealId,
@@ -166,6 +171,8 @@ interface PipelineViewProps {
   setOwnerFilter,
   statusFilter,
   setStatusFilter,
+  period,
+  setPeriod,
   draggingId,
   selectedDealId,
   setSelectedDealId,
@@ -221,6 +228,8 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
   setOwnerFilter,
   statusFilter,
   setStatusFilter,
+  period,
+  setPeriod,
   draggingId,
   selectedDealId,
   setSelectedDealId,
@@ -325,6 +334,8 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
             setOwnerFilter={setOwnerFilter}
             statusFilter={statusFilter}
             setStatusFilter={setStatusFilter}
+            period={period}
+            setPeriod={setPeriod}
             onNewDeal={() => setIsCreateModalOpen(true)}
           />
 

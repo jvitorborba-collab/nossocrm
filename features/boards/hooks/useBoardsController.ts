@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { getDateRange, type PeriodFilter } from '@/features/dashboard/hooks/useDashboardMetrics';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { DealView, Board, CustomFieldDefinition } from '@/types';
 import {
@@ -128,6 +129,8 @@ export const useBoardsController = () => {
   const [ownerFilter, setOwnerFilter] = useState<'all' | 'mine'>('all');
   const [statusFilter, setStatusFilter] = useState<'open' | 'won' | 'lost' | 'all'>('open');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  // Filtro de período (mesmas opções da Visão Geral). Aplica sobre a data de criação do negócio.
+  const [period, setPeriod] = useState<PeriodFilter>('all');
 
   // Track last context signature to avoid unnecessary setContext calls
   const lastContextSignatureRef = useRef<string | null>(null);
@@ -362,12 +365,17 @@ export const useBoardsController = () => {
     const searchLower = searchTerm.toLowerCase();
 
     // Parse das datas do filtro uma única vez (antes era new Date() por deal)
-    const startTime = dateRange.start ? new Date(dateRange.start).getTime() : null;
+    let startTime = dateRange.start ? new Date(dateRange.start).getTime() : null;
     let endTime: number | null = null;
     if (dateRange.end) {
       const endDate = new Date(dateRange.end);
       endDate.setHours(23, 59, 59, 999);
       endTime = endDate.getTime();
+    }
+    if (period !== 'all') {
+      const range = getDateRange(period);
+      startTime = range.start.getTime();
+      endTime = range.end.getTime();
     }
 
     return deals.filter(l => {
@@ -430,6 +438,7 @@ export const useBoardsController = () => {
     ownerFilter,
     dateRange.start,      // Apenas as propriedades usadas do dateRange
     dateRange.end,
+    period,
     statusFilter,
     profile?.id,          // Apenas as propriedades usadas do profile
     profile?.nickname,
@@ -864,6 +873,8 @@ export const useBoardsController = () => {
     setStatusFilter,
     dateRange,
     setDateRange,
+    period,
+    setPeriod,
 
     draggingId,
     selectedDealId,

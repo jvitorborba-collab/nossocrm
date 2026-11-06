@@ -55,7 +55,7 @@ interface DateRange {
 /**
  * Calcula o range de datas baseado no filtro de período
  */
-function getDateRange(period: PeriodFilter): DateRange {
+export function getDateRange(period: PeriodFilter): DateRange {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const endOfToday = new Date(today.getTime() + 24 * 60 * 60 * 1000 - 1);
