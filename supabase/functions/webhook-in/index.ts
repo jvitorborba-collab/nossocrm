@@ -34,6 +34,11 @@ type LeadPayload = {
   phone?: string;
   source?: string;
   notes?: string;
+  /**
+   * Tags extras para o negócio (opcional). Aceita array ou string separada por vírgula.
+   * A tag padrão "Novo" é sempre mantida; estas são acrescentadas.
+   */
+  tags?: string[] | string;
   /** Nome da empresa (cliente) */
   company_name?: string;
 
@@ -86,6 +91,38 @@ function normalizePhone(phone?: string) {
   if (!phone) return null;
   const cleaned = phone.trim();
   return cleaned || null;
+}
+
+/**
+ * Lê as tags extras do payload (array ou "a, b, c"), limpando espaços, duplicadas e excessos.
+ * Retorna [] quando não houver nada válido (comportamento antigo preservado).
+ */
+function parseExtraTags(raw: unknown): string[] {
+  const items: unknown[] = Array.isArray(raw)
+    ? raw
+    : typeof raw === "string"
+      ? raw.split(",")
+      : [];
+
+  const out: string[] = [];
+  for (const item of items) {
+    if (typeof item !== "string") continue;
+    const tag = item.trim().slice(0, 50);
+    if (!tag) continue;
+    if (out.some((t) => t.toLowerCase() === tag.toLowerCase())) continue;
+    out.push(tag);
+    if (out.length >= 10) break;
+  }
+  return out;
+}
+
+/** Junta tags sem repetir (ignora maiúsculas/minúsculas), preservando a ordem. */
+function mergeTags(base: string[], extra: string[]): string[] {
+  const merged = [...base];
+  for (const tag of extra) {
+    if (!merged.some((t) => t.toLowerCase() === tag.toLowerCase())) merged.push(tag);
+  }
+  return merged;
 }
 
 function getSecretFromRequest(req: Request) {
@@ -183,7 +220,7 @@ Deno.serve(async (req) => {
 
   const { data: source, error: sourceErr } = await supabase
     .from("integration_inbound_sources")
-    .select("id, organization_id, entry_board_id, entry_stage_id, secret, active")
+    .select("id, organization_id, entry_board_id, entry_stage_id, secret, active, move_existing, add_tag")
     .eq("id", sourceId)
     .maybeSingle();
 
@@ -355,6 +392,10 @@ Deno.serve(async (req) => {
   // - Se já existir um deal "em aberto" do mesmo contato no mesmo board, atualiza em vez de criar outro.
   // - Se não existir (ou não tiver contato), cria.
   const dealTitle = dealTitleFromPayload || leadName || leadEmail || leadPhone || "Novo Lead";
+  const extraTags = mergeTags(
+    parseExtraTags(payload.tags),
+    toNullableString((source as any).add_tag) ? [String((source as any).add_tag).trim()] : [],
+  );
 
   let dealId: string | null = null;
   let dealAction: "created" | "updated" = "created";
@@ -362,7 +403,7 @@ Deno.serve(async (req) => {
   if (contactId) {
     const { data: existingDeal, error: findDealErr } = await supabase
       .from("deals")
-      .select("id, stage_id, is_won, is_lost")
+      .select("id, stage_id, is_won, is_lost, tags")
       .eq("organization_id", source.organization_id)
       .eq("board_id", source.entry_board_id)
       .eq("contact_id", contactId)
@@ -386,8 +427,34 @@ Deno.serve(async (req) => {
       };
       if (dealValue !== null) updates.value = dealValue;
       if (clientCompanyId) updates.client_company_id = clientCompanyId;
+      // Só mexe nas tags quando o payload trouxer tags; as existentes são preservadas.
+      if (extraTags.length > 0) {
+        const currentTags = Array.isArray((existingDeal as any).tags)
+          ? ((existingDeal as any).tags as string[])
+          : [];
+        updates.tags = mergeTags(currentTags, extraTags);
+      }
 
-      // mantém stage atual (não “puxa” de volta pro stage de entrada)
+      // Por padrão mantém o stage atual. Com move_existing, avança o lead para a etapa
+      // configurada (somente para frente, nunca volta para uma etapa anterior).
+      if (
+        (source as any).move_existing &&
+        existingDeal.stage_id &&
+        existingDeal.stage_id !== source.entry_stage_id
+      ) {
+        const { data: stageRows } = await supabase
+          .from("board_stages")
+          .select("id, order")
+          .in("id", [existingDeal.stage_id as string, source.entry_stage_id as string]);
+        const orderOf = (id: string) =>
+          (stageRows ?? []).find((s: any) => s.id === id)?.order as number | undefined;
+        const cur = orderOf(existingDeal.stage_id as string);
+        const target = orderOf(source.entry_stage_id as string);
+        if (typeof cur === "number" && typeof target === "number" && target > cur) {
+          updates.stage_id = source.entry_stage_id;
+          updates.last_stage_change_date = new Date().toISOString();
+        }
+      }
       // apenas carimba metadados do inbound
       updates.custom_fields = {
         inbound_source_id: source.id,
@@ -418,7 +485,7 @@ Deno.serve(async (req) => {
         contact_id: contactId,
         client_company_id: clientCompanyId,
         last_stage_change_date: new Date().toISOString(),
-        tags: ["Novo"],
+        tags: mergeTags(["Novo"], extraTags),
         custom_fields: {
           inbound_source_id: source.id,
           inbound_external_event_id: externalEventId,
