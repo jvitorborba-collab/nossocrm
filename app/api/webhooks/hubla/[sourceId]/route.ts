@@ -158,8 +158,8 @@ async function findOrCreateContact(sb: Sb, orgId: string, p: HublaParsed): Promi
 }
 
 /**
- * Se o produto vendido casa com uma regra e o contato já tem negócio no funil de origem,
- * marca com a tag, move para a etapa final e soma o valor da venda. Retorna o id do negócio
+ * Se o produto vendido casa com uma regra: com negócio no funil de origem, marca com a tag, move
+ * para a etapa final e soma o valor; sem negócio, cria um já na etapa final com a tag. Retorna o id do negócio
  * atualizado, ou null quando nenhuma regra se aplicou (segue o fluxo normal).
  */
 async function applyProductRules(sb: Sb, orgId: string, contactId: string, p: HublaParsed): Promise<string | null> {
@@ -182,17 +182,49 @@ async function applyProductRules(sb: Sb, orgId: string, contactId: string, p: Hu
       .order('updated_at', { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (!deal) continue;
 
+    // Sem negócio prévio no funil (ex.: comprou o Detox antes da integração): cria já na etapa final.
+    const targetBoardId = (deal?.board_id as string | undefined) ?? boardIds[0];
     const { data: stages } = await sb
       .from('board_stages')
       .select('id, label, order')
-      .eq('board_id', deal.board_id as string);
+      .eq('board_id', targetBoardId);
     const targetStage = pickTargetStage(
       (stages ?? []).map((s) => ({ id: s.id as string, label: s.label as string, order: Number(s.order) })),
       rule,
     );
     if (!targetStage) continue;
+
+    if (!deal) {
+      const created = new Date().toISOString();
+      const { data: createdDeal, error: createErr } = await sb
+        .from('deals')
+        .insert({
+          organization_id: orgId,
+          title: p.productName ? `${p.productName} — ${p.buyerName ?? p.buyerEmail ?? 'Cliente'}` : p.buyerName ?? 'Venda Hubla',
+          value: p.amount,
+          priority: 'medium',
+          board_id: targetBoardId,
+          stage_id: targetStage,
+          contact_id: contactId,
+          last_stage_change_date: created,
+          closed_at: created,
+          is_won: true,
+          is_lost: false,
+          probability: 100,
+          tags: mergeTags(['Hubla'], [rule.tag]),
+          custom_fields: {
+            hubla_invoice_id: p.invoiceId,
+            hubla_product: p.productName,
+            hubla_payment_method: p.paymentMethod,
+            [`hubla_rule_${rule.id}_invoice`]: p.invoiceId,
+          },
+        })
+        .select('id')
+        .single();
+      if (createErr) throw createErr;
+      return createdDeal.id as string;
+    }
 
     const now = new Date().toISOString();
     const prev = (deal.custom_fields as Record<string, unknown>) ?? {};
