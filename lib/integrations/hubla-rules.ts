@@ -22,6 +22,13 @@ export const HUBLA_PRODUCT_RULES: HublaProductRule[] = [
     tag: 'comprou-voce-mamae',
     stagePattern: /virou\s+aluna.*mam[aã]e/i,
   },
+  {
+    id: 'ciclos',
+    productPattern: /\bciclos\b/i,
+    boardKey: 'webinario-diario-ciclos',
+    tag: 'comprou-ciclos',
+    stagePattern: /virou\s+aluna.*ciclos/i,
+  },
 ];
 
 export function matchProductRules(productName: string | null): HublaProductRule[] {

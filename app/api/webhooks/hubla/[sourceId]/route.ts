@@ -163,6 +163,8 @@ async function findOrCreateContact(sb: Sb, orgId: string, p: HublaParsed): Promi
  * atualizado, ou null quando nenhuma regra se aplicou (segue o fluxo normal).
  */
 async function applyProductRules(sb: Sb, orgId: string, contactId: string, p: HublaParsed): Promise<string | null> {
+  // Uma compra pode casar com mais de uma regra (ex.: Você Mamãe + Ciclos): aplica todas.
+  let firstDealId: string | null = null;
   for (const rule of matchProductRules(p.productName)) {
     const { data: boards } = await sb
       .from('boards')
@@ -223,7 +225,8 @@ async function applyProductRules(sb: Sb, orgId: string, contactId: string, p: Hu
         .select('id')
         .single();
       if (createErr) throw createErr;
-      return createdDeal.id as string;
+      firstDealId = firstDealId ?? (createdDeal.id as string);
+      continue;
     }
 
     const now = new Date().toISOString();
@@ -241,9 +244,9 @@ async function applyProductRules(sb: Sb, orgId: string, contactId: string, p: Hu
       })
       .eq('id', deal.id as string);
     if (error) throw error;
-    return deal.id as string;
+    firstDealId = firstDealId ?? (deal.id as string);
   }
-  return null;
+  return firstDealId;
 }
 
 async function applyEvent(sb: Sb, source: Source, p: HublaParsed) {

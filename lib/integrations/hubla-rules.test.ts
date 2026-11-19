@@ -9,6 +9,18 @@ describe('hubla-rules', () => {
     expect(matchProductRules(null)).toHaveLength(0);
   });
 
+  it('casa Ciclos, sozinho ou junto de bumps, sem pegar outros produtos', () => {
+    expect(matchProductRules('Ciclos').map((r) => r.id)).toEqual(['ciclos']);
+    expect(matchProductRules('Ciclos + Chás poderosos para melhorar a qualidade do óvulo').map((r) => r.id)).toEqual(['ciclos']);
+    expect(matchProductRules('Chás poderosos para melhorar a qualidade do óvulo')).toHaveLength(0);
+    const ciclos = HUBLA_PRODUCT_RULES.find((r) => r.id === 'ciclos')!;
+    const stages = [
+      { id: 'a', label: 'Entrou na Aula', order: 0 },
+      { id: 'e', label: 'Virou Aluna Ciclos', order: 4 },
+    ];
+    expect(pickTargetStage(stages, ciclos)).toBe('e');
+  });
+
   it('escolhe a etapa pelo nome e cai na última se não achar', () => {
     const rule = HUBLA_PRODUCT_RULES[0];
     const stages = [
