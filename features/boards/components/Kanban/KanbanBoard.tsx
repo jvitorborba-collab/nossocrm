@@ -5,6 +5,7 @@ import { isDealRotting, getActivityStatus } from '@/features/boards/hooks/useBoa
 import { MoveToStageModal } from '../Modals/MoveToStageModal';
 import { SkeletonDealCard } from '@/components/ui/Skeleton';
 import { useLifecycleStages } from '@/lib/query/hooks/useLifecycleStagesQuery';
+import { computeStageConversion, formatPercent } from '@/features/boards/utils/stageConversion';
 
 /**
  * UI: Drop highlight should follow the stage color.
@@ -144,6 +145,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     return { map, totals };
   }, [filteredDeals]);
 
+  // Conversão acumulada etapa a etapa (respeita os filtros ativos, ex.: período).
+  const stageConversion = useMemo(
+    () => computeStageConversion(stages.map((st) => dealsByStageId.map.get(st.id)?.length ?? 0)),
+    [stages, dealsByStageId]
+  );
+
   // Performance: evita `find` por stage (O(S*L)). Map é O(1) por lookup.
   const lifecycleStageNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -189,7 +196,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
   return (
     <div role="list" aria-label="Colunas do pipeline" className="flex gap-4 h-full overflow-x-auto pb-2 w-full">
-      {stages.map(stage => {
+      {stages.map((stage, stageIndex) => {
+        const conversion = stageConversion[stageIndex];
         const stageDeals = dealsByStageId.map.get(stage.id) ?? [];
         const stageValue = dealsByStageId.totals.get(stage.id) ?? 0;
         const isOver = dragOverStage === stage.id && draggingId !== null;
@@ -234,6 +242,23 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 <span className="text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2 py-0.5 rounded text-slate-600 dark:text-slate-300">
                   {stageDeals.length}
                 </span>
+              </div>
+
+              {/* Conversão: % que chegou a esta etapa (ou além) vs. a etapa anterior e vs. o início */}
+              <div
+                className="mb-1 min-h-[16px] text-[11px] font-semibold text-slate-500 dark:text-slate-400"
+                title="Conversão acumulada: considera os negócios que estão nesta etapa ou em etapas seguintes. Respeita os filtros ativos (período, dono, busca)."
+              >
+                {conversion && stageIndex > 0 ? (
+                  <>
+                    <span className="text-emerald-600 dark:text-emerald-400">
+                      {formatPercent(conversion.fromPrevious)}
+                    </span>{' '}
+                    da etapa anterior · {formatPercent(conversion.fromFirst)} do início
+                  </>
+                ) : (
+                  <span className="opacity-70">Início do funil</span>
+                )}
               </div>
 
               {/* Automation Indicator - Always rendered for consistent height */}
