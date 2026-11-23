@@ -57,6 +57,8 @@ interface PipelineViewProps {
   openActivityMenuId: string | null;
   setOpenActivityMenuId: (id: string | null) => void;
   filteredDeals: DealView[];
+  /** Leads criados no período (para o % de conversão). */
+  conversionDeals?: DealView[];
   customFieldDefinitions: CustomFieldDefinition[];
   isLoading: boolean;
   handleDragStart: (e: React.DragEvent, id: string, title: string) => void;
@@ -127,6 +129,7 @@ interface PipelineViewProps {
   openActivityMenuId,
   setOpenActivityMenuId,
   filteredDeals,
+  conversionDeals,
   customFieldDefinitions,
   isLoading,
   handleDragStart,
@@ -181,6 +184,7 @@ interface PipelineViewProps {
   openActivityMenuId,
   setOpenActivityMenuId,
   filteredDeals,
+  conversionDeals,
   customFieldDefinitions,
   isLoading,
   handleDragStart,
@@ -238,6 +242,7 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
   openActivityMenuId,
   setOpenActivityMenuId,
   filteredDeals,
+  conversionDeals,
   customFieldDefinitions,
   isLoading,
   handleDragStart,
@@ -346,6 +351,7 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
               <KanbanBoard
                 stages={activeBoard.stages}
                 filteredDeals={filteredDeals}
+                conversionDeals={conversionDeals}
                 draggingId={draggingId}
                 handleDragStart={handleDragStart}
                 handleDragOver={handleDragOver}

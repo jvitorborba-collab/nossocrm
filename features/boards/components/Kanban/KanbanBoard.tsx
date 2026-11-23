@@ -52,6 +52,8 @@ function dropHighlightClasses(stageBgClass?: string): string {
 interface KanbanBoardProps {
   stages: BoardStage[];
   filteredDeals: DealView[];
+  /** Leads criados no período, usados só no % de conversão (cai em filteredDeals se ausente). */
+  conversionDeals?: DealView[];
   draggingId: string | null;
   handleDragStart: (e: React.DragEvent, id: string, title: string) => void;
   handleDragOver: (e: React.DragEvent) => void;
@@ -105,6 +107,7 @@ interface KanbanBoardProps {
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   stages,
   filteredDeals,
+  conversionDeals,
   draggingId,
   handleDragStart,
   handleDragOver,
@@ -145,11 +148,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     return { map, totals };
   }, [filteredDeals]);
 
-  // Conversão acumulada etapa a etapa (respeita os filtros ativos, ex.: período).
-  const stageConversion = useMemo(
-    () => computeStageConversion(stages.map((st) => dealsByStageId.map.get(st.id)?.length ?? 0)),
-    [stages, dealsByStageId]
-  );
+  // Conversão acumulada etapa a etapa, sobre a coorte de leads criados no período filtrado.
+  const stageConversion = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const deal of conversionDeals ?? filteredDeals) {
+      counts.set(deal.status, (counts.get(deal.status) ?? 0) + 1);
+    }
+    return computeStageConversion(stages.map((st) => counts.get(st.id) ?? 0));
+  }, [stages, conversionDeals, filteredDeals]);
 
   // Performance: evita `find` por stage (O(S*L)). Map é O(1) por lookup.
   const lifecycleStageNameById = useMemo(() => {
@@ -247,7 +253,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               {/* Conversão: % que chegou a esta etapa (ou além) vs. a etapa anterior e vs. o início */}
               <div
                 className="mb-1 min-h-[16px] text-[11px] font-semibold text-slate-500 dark:text-slate-400"
-                title="Conversão acumulada: considera os negócios que estão nesta etapa ou em etapas seguintes. Respeita os filtros ativos (período, dono, busca)."
+                title={
+                  conversion && stageIndex > 0
+                    ? `${conversion.reached} de ${stageConversion[stageIndex - 1].reached} leads chegaram até aqui. Base: leads criados no período filtrado (não a última atividade), contados pela etapa onde estão hoje.`
+                    : 'Base do cálculo: leads criados no período filtrado.'
+                }
               >
                 {conversion && stageIndex > 0 ? (
                   <>

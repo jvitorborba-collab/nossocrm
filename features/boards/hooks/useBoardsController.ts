@@ -354,6 +354,39 @@ export const useBoardsController = () => {
     return () => document.removeEventListener('click', handleClickOutside);
   }, [openActivityMenuId]);
 
+  // Conversão do funil: coorte pelos leads CRIADOS no período filtrado (e não pela última atividade).
+  // Assim "quantos entraram no período" e "quantos desses já chegaram à etapa final" ficam pareados,
+  // mesmo que a venda tenha acontecido depois. Não aplica a regra dos 30 dias para ganhos/perdidos.
+  const conversionDeals = useMemo(() => {
+    const searchLower = searchTerm.toLowerCase();
+    let startTime = dateRange.start ? new Date(dateRange.start).getTime() : null;
+    let endTime: number | null = null;
+    if (dateRange.end) {
+      const endDate = new Date(dateRange.end);
+      endDate.setHours(23, 59, 59, 999);
+      endTime = endDate.getTime();
+    }
+    if (period !== 'all') {
+      const range = getDateRange(period);
+      startTime = range.start.getTime();
+      endTime = range.end.getTime();
+    }
+    return deals.filter(l => {
+      if (
+        !(l.title || '').toLowerCase().includes(searchLower) &&
+        !(l.companyName || '').toLowerCase().includes(searchLower)
+      ) return false;
+      if (ownerFilter !== 'all' && l.ownerId !== profile?.id) return false;
+      const created = new Date(l.createdAt).getTime();
+      if (startTime !== null && created < startTime) return false;
+      if (endTime !== null && created > endTime) return false;
+      if (statusFilter === 'open') return !l.isWon && !l.isLost;
+      if (statusFilter === 'won') return l.isWon;
+      if (statusFilter === 'lost') return l.isLost;
+      return true;
+    });
+  }, [deals, searchTerm, ownerFilter, dateRange.start, dateRange.end, period, statusFilter, profile?.id]);
+
   // Filtering Logic
   const filteredDeals = useMemo(() => {
     // Pre-compute valores fora do loop para evitar recriação a cada iteração
@@ -889,6 +922,7 @@ export const useBoardsController = () => {
     openActivityMenuId,
     setOpenActivityMenuId,
     filteredDeals,
+    conversionDeals,
     customFieldDefinitions,
     isLoading,
     handleDragStart,
