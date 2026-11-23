@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { matchProductRules, pickTargetStage, mergeTags, HUBLA_PRODUCT_RULES } from './hubla-rules';
+import { matchProductRules, pickTargetStage, mergeTags, HUBLA_PRODUCT_RULES, samePhone, phoneTail } from './hubla-rules';
 
 describe('hubla-rules', () => {
   it('casa Você Mamãe, inclusive junto de orderbumps', () => {
@@ -36,5 +36,19 @@ describe('hubla-rules', () => {
   it('mescla tags sem duplicar', () => {
     expect(mergeTags(['Hubla'], ['comprou-voce-mamae', 'Hubla'])).toEqual(['Hubla', 'comprou-voce-mamae']);
     expect(mergeTags(null, ['x'])).toEqual(['x']);
+  });
+
+  it('cruza telefones ignorando +, DDI e formatação', () => {
+    expect(samePhone('+5587988276641', '5587988276641')).toBe(true);
+    expect(samePhone('+55 (87) 98827-6641', '87988276641')).toBe(true);
+    expect(samePhone('+5587988276641', '5587988276642')).toBe(false);
+    expect(samePhone(null, '5587988276641')).toBe(false);
+    expect(phoneTail('123')).toBeNull();
+  });
+
+  it('a regra do Ciclos aponta para os funis de ebook', () => {
+    const ciclos = HUBLA_PRODUCT_RULES.find((r) => r.id === 'ciclos')!;
+    expect(ciclos.attributionBoardKeys).toContain('ebook-menstruacao');
+    expect(ciclos.attributionBoardKeys).not.toContain('webinario-diario-ciclos');
   });
 });

@@ -12,6 +12,12 @@ export type HublaProductRule = {
   tag: string;
   /** Etapa de destino: tenta pelo nome; se não achar, usa a última etapa do funil. */
   stagePattern: RegExp;
+  /**
+   * Funis de origem (slugs) onde o lead pode ter entrado antes de comprar (ex.: ebooks). Se o
+   * comprador já tem negócio neles (cruzando e-mail e telefone), o negócio recebe a tag e vai
+   * para a etapa final, sem criar negócio novo nem somar valor (evita contar a venda duas vezes).
+   */
+  attributionBoardKeys?: string[];
 };
 
 export const HUBLA_PRODUCT_RULES: HublaProductRule[] = [
@@ -28,6 +34,13 @@ export const HUBLA_PRODUCT_RULES: HublaProductRule[] = [
     boardKey: 'webinario-diario-ciclos',
     tag: 'comprou-ciclos',
     stagePattern: /virou\s+aluna.*ciclos/i,
+    attributionBoardKeys: [
+      'ebook-chas-inducao',
+      'ebook-chas-para-fertilidade',
+      'ebook-chas-para-fertilidade-3',
+      'ebook-menstruacao',
+      'suplemento-ovulo',
+    ],
   },
 ];
 
@@ -49,4 +62,21 @@ export function pickTargetStage(
 export function mergeTags(current: unknown, extra: string[]): string[] {
   const base = Array.isArray(current) ? (current as unknown[]).filter((t): t is string => typeof t === 'string') : [];
   return Array.from(new Set([...base, ...extra]));
+}
+
+/** Só dígitos do telefone (ex.: "+55 (87) 98827-6641" → "5587988276641"). */
+export function phoneDigits(phone: string | null | undefined): string {
+  return (phone ?? '').replace(/\D/g, '');
+}
+
+/** Últimos 9 dígitos: ignora DDI/DDD e o "+", permitindo cruzar "+5587988276641" com "87988276641". */
+export function phoneTail(phone: string | null | undefined): string | null {
+  const d = phoneDigits(phone);
+  return d.length >= 9 ? d.slice(-9) : null;
+}
+
+export function samePhone(a: string | null | undefined, b: string | null | undefined): boolean {
+  const ta = phoneTail(a);
+  const tb = phoneTail(b);
+  return !!ta && ta === tb;
 }

@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { createStaticAdminClient } from '@/lib/supabase/staticAdminClient';
 import { isValidUUID } from '@/lib/supabase/utils';
 import { parseHublaEvent, type HublaParsed } from '@/lib/integrations/hubla';
-import { matchProductRules, pickTargetStage, mergeTags } from '@/lib/integrations/hubla-rules';
+import { matchProductRules, pickTargetStage, mergeTags, phoneTail, samePhone, type HublaProductRule } from '@/lib/integrations/hubla-rules';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -158,6 +158,97 @@ async function findOrCreateContact(sb: Sb, orgId: string, p: HublaParsed): Promi
 }
 
 /**
+ * Atribuição nos funis de origem (ex.: ebooks): cruza o comprador por e-mail E telefone com os
+ * contatos que já têm negócio nesses funis e leva o negócio para a etapa final com a tag.
+ * Não cria negócio novo nem soma valor (a venda já é contada no funil principal).
+ */
+async function applyAttribution(
+  sb: Sb,
+  orgId: string,
+  contactId: string,
+  p: HublaParsed,
+  rule: HublaProductRule,
+): Promise<void> {
+  const keys = rule.attributionBoardKeys ?? [];
+  if (keys.length === 0) return;
+
+  // Contatos que representam a mesma pessoa: o já resolvido + qualquer um com mesmo e-mail/telefone.
+  const related = new Set<string>([contactId]);
+  if (p.buyerEmail) {
+    const { data } = await sb
+      .from('contacts')
+      .select('id, email')
+      .eq('organization_id', orgId)
+      .ilike('email', p.buyerEmail.replace(/[%_]/g, (m) => `\\${m}`));
+    for (const c of data ?? []) {
+      if ((c.email as string | null)?.toLowerCase() === p.buyerEmail.toLowerCase()) related.add(c.id as string);
+    }
+  }
+  const tail = phoneTail(p.buyerPhone);
+  if (tail) {
+    const { data } = await sb
+      .from('contacts')
+      .select('id, phone')
+      .eq('organization_id', orgId)
+      .ilike('phone', `%${tail}`);
+    for (const c of data ?? []) {
+      if (samePhone(c.phone as string | null, p.buyerPhone)) related.add(c.id as string);
+    }
+  }
+
+  const { data: boards } = await sb
+    .from('boards')
+    .select('id')
+    .eq('organization_id', orgId)
+    .in('key', keys);
+  const boardIds = (boards ?? []).map((b) => b.id as string);
+  if (boardIds.length === 0) return;
+
+  const { data: deals } = await sb
+    .from('deals')
+    .select('id, board_id, stage_id, tags, custom_fields')
+    .eq('organization_id', orgId)
+    .in('contact_id', Array.from(related))
+    .in('board_id', boardIds)
+    .is('deleted_at', null)
+    .order('updated_at', { ascending: false });
+
+  // Um negócio por funil (o mais recente).
+  const seen = new Set<string>();
+  for (const deal of deals ?? []) {
+    const boardId = deal.board_id as string;
+    if (seen.has(boardId)) continue;
+    seen.add(boardId);
+
+    const { data: stages } = await sb.from('board_stages').select('id, label, order').eq('board_id', boardId);
+    const targetStage = pickTargetStage(
+      (stages ?? []).map((s) => ({ id: s.id as string, label: s.label as string, order: Number(s.order) })),
+      rule,
+    );
+    if (!targetStage) continue;
+
+    const now = new Date().toISOString();
+    const prev = (deal.custom_fields as Record<string, unknown>) ?? {};
+    const { error } = await sb
+      .from('deals')
+      .update({
+        stage_id: targetStage,
+        ...(deal.stage_id !== targetStage ? { last_stage_change_date: now } : {}),
+        is_won: true,
+        is_lost: false,
+        probability: 100,
+        loss_reason: null,
+        closed_at: now,
+        tags: mergeTags(deal.tags, [rule.tag]),
+        custom_fields: { ...prev, [`hubla_rule_${rule.id}_invoice`]: p.invoiceId, hubla_product: p.productName },
+        updated_at: now,
+      })
+      .eq('id', deal.id as string);
+    if (error) console.error('[hubla] falha na atribuição ao funil de origem', error);
+  }
+}
+
+/**
  * Se o produto vendido casa com uma regra: com negócio no funil de origem, marca com a tag, move
  * para a etapa final e soma o valor; sem negócio, cria um já na etapa final com a tag. Retorna o id do negócio
  * atualizado, ou null quando nenhuma regra se aplicou (segue o fluxo normal).
@@ -166,6 +257,13 @@ async function applyProductRules(sb: Sb, orgId: string, contactId: string, p: Hu
   // Uma compra pode casar com mais de uma regra (ex.: Você Mamãe + Ciclos): aplica todas.
   let firstDealId: string | null = null;
   for (const rule of matchProductRules(p.productName)) {
+    // Funis de origem (ebooks): não pode derrubar o fluxo principal se falhar.
+    try {
+      await applyAttribution(sb, orgId, contactId, p, rule);
+    } catch (err) {
+      console.error('[hubla] erro na atribuição', err);
+    }
+
     const { data: boards } = await sb
       .from('boards')
       .select('id')
