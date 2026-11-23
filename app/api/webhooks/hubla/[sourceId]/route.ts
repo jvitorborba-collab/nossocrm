@@ -237,6 +237,12 @@ async function applyProductRules(sb: Sb, orgId: string, contactId: string, p: Hu
       .update({
         stage_id: targetStage,
         ...(moved ? { last_stage_change_date: now } : {}),
+        // Venda paga: o negócio vira ganho (evita que um evento "perdido" posterior o reabra/derrube).
+        is_won: true,
+        is_lost: false,
+        probability: 100,
+        loss_reason: null,
+        closed_at: now,
         tags: mergeTags(deal.tags, [rule.tag]),
         value: Number(deal.value ?? 0) + (p.amount > 0 ? p.amount : 0),
         custom_fields: { ...prev, [`hubla_rule_${rule.id}_invoice`]: p.invoiceId, hubla_product: p.productName },

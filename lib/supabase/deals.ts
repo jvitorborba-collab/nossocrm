@@ -262,19 +262,29 @@ export const dealsService = {
       // Embedded select: traz deal_items junto com deals em UMA query
       // Elimina N+1: antes carregava TODOS items e filtrava no cliente
       // Agora o Postgres já retorna os items aninhados por deal
-      // Safety limit: cap at 1000 deals for non-paginated access
-      let dealsQuery = supabase
-        .from('deals')
-        .select(`
+      // O PostgREST devolve no máximo 1000 linhas por request. Antes só líamos as 1000 mais
+      // recentes por data de criação, então negócios antigos movidos/atualizados agora (ex.: lead
+      // antigo que comprou) sumiam do funil. Agora paginamos até o teto de segurança.
+      const PAGE_SIZE = 1000;
+      const MAX_PAGES = 15; // teto de 15.000 negócios
+      const rows: unknown[] = [];
+      for (let page = 0; page < MAX_PAGES; page++) {
+        let pageQuery = supabase
+          .from('deals')
+          .select(`
           *,
           deal_items (*)
         `);
-      if (options?.signal) dealsQuery = dealsQuery.abortSignal(options.signal);
-      const { data, error } = await dealsQuery
-        .order('created_at', { ascending: false })
-        .limit(1000);
-
-      if (error) return { data: null, error };
+        if (options?.signal) pageQuery = pageQuery.abortSignal(options.signal);
+        const { data: pageData, error: pageError } = await pageQuery
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
+          .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+        if (pageError) return { data: null, error: pageError };
+        rows.push(...(pageData || []));
+        if (!pageData || pageData.length < PAGE_SIZE) break;
+      }
+      const data = rows;
 
       const deals = (data || []).map(d => transformDeal(d as DbDealWithItems));
       return { data: deals, error: null };
